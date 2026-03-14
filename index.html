@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cube Timer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #1a1a2e;
+      color: #eee;
+      font-family: 'Courier New', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      user-select: none;
+    }
+
+    #type-selector {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      padding: 20px 20px 0;
+    }
+
+    #type-selector button {
+      background: #16213e;
+      border: 1px solid #2a2a4a;
+      color: #888;
+      padding: 6px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.85rem;
+      transition: all 0.15s;
+    }
+
+    #type-selector button:hover { color: #ccc; border-color: #555; }
+    #type-selector button.active {
+      background: #0f3460;
+      border-color: #a0c4ff;
+      color: #a0c4ff;
+    }
+
+    #scramble {
+      margin-top: 24px;
+      font-size: 1.3rem;
+      letter-spacing: 0.05em;
+      color: #a0c4ff;
+      max-width: 700px;
+      text-align: center;
+      line-height: 1.6;
+      padding: 0 20px;
+    }
+
+    #timer-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #time {
+      font-size: 8rem;
+      font-weight: bold;
+      letter-spacing: -0.02em;
+      transition: color 0.1s;
+      color: #fff;
+      line-height: 1;
+    }
+
+    #time.ready { color: #4ade80; }
+    #time.running { color: #facc15; }
+
+    #hint {
+      margin-top: 20px;
+      color: #666;
+      font-size: 0.9rem;
+    }
+
+    #solves {
+      width: 100%;
+      max-width: 560px;
+      padding: 0 20px 40px;
+    }
+
+    #solves h2 {
+      font-size: 0.85rem;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 12px;
+      border-top: 1px solid #333;
+      padding-top: 16px;
+    }
+
+    #solve-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    #solve-list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #16213e;
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-size: 1rem;
+    }
+
+    #solve-list li .num { color: #555; font-size: 0.8rem; }
+    #solve-list li .t { color: #fff; font-size: 1.1rem; }
+    #solve-list li .scr { color: #555; font-size: 0.7rem; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #solve-list li .actions { display: flex; gap: 4px; }
+    #solve-list li .del, #solve-list li .p2 {
+      background: none; border: none; cursor: pointer;
+      font-size: 0.75rem; padding: 2px 6px; line-height: 1;
+      border-radius: 4px;
+    }
+    #solve-list li .del { color: #555; }
+    #solve-list li .del:hover { color: #f87171; }
+    #solve-list li .p2 { color: #555; border: 1px solid #333; }
+    #solve-list li .p2:hover { color: #fb923c; border-color: #fb923c; }
+    #solve-list li .p2.active { color: #fb923c; border-color: #fb923c; background: #2a1a0e; }
+
+    #stats {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+      font-size: 0.85rem;
+      color: #999;
+    }
+    #stats span b { color: #fff; }
+  </style>
+</head>
+<body>
+
+<div id="type-selector"></div>
+<div id="scramble">Loading scramble...</div>
+
+<div id="timer-area">
+  <div id="time">0.000</div>
+  <div id="hint">Hold SPACE or touch to start</div>
+</div>
+
+<div id="solves">
+  <div id="stats" style="display:none">
+    <span>ao5: <b id="ao5">—</b></span>
+    <span>ao12: <b id="ao12">—</b></span>
+    <span>ao100: <b id="ao100">—</b></span>
+    <span>best: <b id="best">—</b></span>
+  </div>
+  <h2 id="solves-heading" style="display:none">Solves</h2>
+  <ul id="solve-list"></ul>
+</div>
+
+<script>
+  // --- Puzzle types ---
+  const PUZZLE_TYPES = [
+    { id: '3x3',    label: '3x3',     scrambleLen: 20, faces: ['U','D','L','R','F','B'] },
+    { id: '2x2',    label: '2x2',     scrambleLen: 11, faces: ['U','F','R'] },
+    { id: '4x4',    label: '4x4',     scrambleLen: 40, faces: ['U','D','L','R','F','B','Uw','Fw','Rw'] },
+    { id: '5x5',    label: '5x5',     scrambleLen: 60, faces: ['U','D','L','R','F','B','Uw','Fw','Rw','Lw','Bw','Dw'] },
+    { id: '3x3oh',  label: '3x3 OH',  scrambleLen: 20, faces: ['U','D','L','R','F','B'] },
+    { id: '3x3bld', label: '3x3 BLD', scrambleLen: 20, faces: ['U','D','L','R','F','B'] },
+    { id: 'pyra',   label: 'Pyra',    scrambleLen: 11, faces: null }, // special generator
+    { id: 'skewb',  label: 'Skewb',   scrambleLen: 9,  faces: null }, // special generator
+    { id: 'clock',  label: 'Clock',   scrambleLen: 0,  faces: null }, // special generator
+  ];
+
+  const MODS = ['', "'", '2'];
+  const PYRA_MOVES = ['U','L','R','B','u','l','r','b'];
+  const SKEWB_MOVES = ['U','L','R','B','u','l','r','b'];
+
+  function isOpposite(a, b) {
+    const pairs = [['U','D'],['L','R'],['F','B'],['Uw','Dw'],['Fw','Bw'],['Rw','Lw']];
+    return pairs.some(p => (p[0]===a&&p[1]===b)||(p[1]===a&&p[0]===b));
+  }
+
+  function generateStdScramble(faces, len) {
+    const moves = [];
+    let lastFace = null, secondLastFace = null;
+    for (let i = 0; i < len; i++) {
+      let face;
+      do {
+        face = faces[Math.floor(Math.random() * faces.length)];
+      } while (face === lastFace || (isOpposite(face, lastFace) && face === secondLastFace));
+      const mod = MODS[Math.floor(Math.random() * MODS.length)];
+      moves.push(face + mod);
+      secondLastFace = lastFace;
+      lastFace = face;
+    }
+    return moves.join('  ');
+  }
+
+  function generatePyraScramble(len) {
+    // Pyraminx: U L R B u l r b, each with ' or nothing, tips separate
+    const moves = [];
+    let last = null;
+    for (let i = 0; i < len; i++) {
+      let m;
+      do { m = PYRA_MOVES[Math.floor(Math.random() * PYRA_MOVES.length)]; } while (m === last);
+      const mod = Math.random() < 0.5 ? '' : "'";
+      moves.push(m + mod);
+      last = m;
+    }
+    // random tips (u l r b)
+    const tips = ['u','l','r','b'].map(t => Math.random() < 0.5 ? null : t + (Math.random()<0.5?'':' '));
+    const tipStr = tips.filter(Boolean).join(' ');
+    return moves.join('  ') + (tipStr ? '  ' + tipStr : '');
+  }
+
+  function generateSkewbScramble(len) {
+    const moves = ['U','L','R','B'];
+    const out = [];
+    let last = null;
+    for (let i = 0; i < len; i++) {
+      let m;
+      do { m = moves[Math.floor(Math.random() * moves.length)]; } while (m === last);
+      const mod = Math.random() < 0.5 ? '' : "'";
+      out.push(m + mod);
+      last = m;
+    }
+    return out.join('  ');
+  }
+
+  function generateClockScramble() {
+    // Clock scramble: pins UR UL DR DL ALL, then face turns
+    const pins = ['UR','UL','DR','DL'];
+    const sides = ['U','R','D','L','ALL'];
+    const pinState = pins.map(() => Math.random() < 0.5 ? 'y' : 'n').join('');
+    const moves = sides.map(s => {
+      const n = Math.floor(Math.random() * 12) + 1;
+      const dir = Math.random() < 0.5 ? '+' : '-';
+      return `${s}${n}${dir}`;
+    });
+    return `${pinState} / ${moves.join(' ')}`;
+  }
+
+  function generateScramble(type) {
+    if (type.id === 'pyra') return generatePyraScramble(type.scrambleLen);
+    if (type.id === 'skewb') return generateSkewbScramble(type.scrambleLen);
+    if (type.id === 'clock') return generateClockScramble();
+    return generateStdScramble(type.faces, type.scrambleLen);
+  }
+
+  // --- Formatting ---
+  function fmt(ms) {
+    if (ms < 60000) return (ms / 1000).toFixed(3);
+    const m = Math.floor(ms / 60000);
+    const s = ((ms % 60000) / 1000).toFixed(3).padStart(6, '0');
+    return `${m}:${s}`;
+  }
+
+  function average(times, n) {
+    if (times.length < n) return null;
+    const slice = times.slice(0, n);
+    const sorted = [...slice].sort((a, b) => a - b);
+    const trimmed = sorted.slice(1, n - 1);
+    return trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
+  }
+
+  // --- State ---
+  const ALL_SOLVES_KEY = 'cuberSolvesV2';
+  let allSolves = JSON.parse(localStorage.getItem(ALL_SOLVES_KEY) || '{}');
+  // allSolves[typeId] = [{ ms, scramble, id, plus2 }, ...]
+
+  let currentTypeId = localStorage.getItem('cuberType') || '3x3';
+  if (!PUZZLE_TYPES.find(t => t.id === currentTypeId)) currentTypeId = '3x3';
+
+  let currentScramble = '';
+  let startTime = null;
+  let elapsed = 0;
+  let state = 'idle';
+  let holdTimer = null;
+  let rafId = null;
+
+  const timeEl = document.getElementById('time');
+  const scrambleEl = document.getElementById('scramble');
+  const hintEl = document.getElementById('hint');
+  const solveListEl = document.getElementById('solve-list');
+  const statsEl = document.getElementById('stats');
+  const solvesHeading = document.getElementById('solves-heading');
+  const typeSelectorEl = document.getElementById('type-selector');
+
+  function currentType() {
+    return PUZZLE_TYPES.find(t => t.id === currentTypeId);
+  }
+
+  function getSolves() {
+    return allSolves[currentTypeId] || [];
+  }
+
+  function setSolves(arr) {
+    allSolves[currentTypeId] = arr;
+    localStorage.setItem(ALL_SOLVES_KEY, JSON.stringify(allSolves));
+  }
+
+  function setScramble() {
+    currentScramble = generateScramble(currentType());
+    scrambleEl.textContent = currentScramble;
+  }
+
+  function switchType(id) {
+    currentTypeId = id;
+    localStorage.setItem('cuberType', id);
+    document.querySelectorAll('#type-selector button').forEach(b => {
+      b.classList.toggle('active', b.dataset.id === id);
+    });
+    setScramble();
+    renderSolves();
+  }
+
+  function buildTypeSelector() {
+    PUZZLE_TYPES.forEach(type => {
+      const btn = document.createElement('button');
+      btn.textContent = type.label;
+      btn.dataset.id = type.id;
+      if (type.id === currentTypeId) btn.classList.add('active');
+      btn.addEventListener('click', () => {
+        if (state !== 'idle') return;
+        switchType(type.id);
+      });
+      typeSelectorEl.appendChild(btn);
+    });
+  }
+
+  function tick() {
+    elapsed = Date.now() - startTime;
+    timeEl.textContent = fmt(elapsed);
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function startTimer() {
+    state = 'running';
+    startTime = Date.now();
+    timeEl.className = 'running';
+    hintEl.textContent = 'Press SPACE to stop';
+    scrambleEl.style.visibility = 'hidden';
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function stopTimer() {
+    cancelAnimationFrame(rafId);
+    elapsed = Date.now() - startTime;
+    timeEl.textContent = fmt(elapsed);
+    timeEl.className = '';
+    state = 'idle';
+    hintEl.textContent = 'Hold SPACE or touch to start';
+    scrambleEl.style.visibility = 'visible';
+    const solves = getSolves();
+    solves.unshift({ ms: elapsed, scramble: currentScramble, id: Date.now(), plus2: 0 });
+    setSolves(solves);
+    renderSolves();
+    setScramble();
+  }
+
+  function deleteSolve(id) {
+    setSolves(getSolves().filter(s => s.id !== id));
+    renderSolves();
+  }
+
+  function incrementPlus2(id) {
+    const solves = getSolves();
+    const solve = solves.find(s => s.id === id);
+    if (!solve) return;
+    const current = Number(solve.plus2) || 0;
+    solve.plus2 = current >= 8 ? 0 : current + 1;
+    setSolves(solves);
+    renderSolves();
+  }
+
+  function renderSolves() {
+    solveListEl.innerHTML = '';
+    const solves = getSolves();
+
+    if (solves.length === 0) {
+      statsEl.style.display = 'none';
+      solvesHeading.style.display = 'none';
+      return;
+    }
+    statsEl.style.display = 'flex';
+    solvesHeading.style.display = 'block';
+
+    const times = solves.map(s => s.ms + (Number(s.plus2) || 0) * 2000);
+    const ao5   = average(times, 5);
+    const ao12  = average(times, 12);
+    const ao100 = average(times, 100);
+    const best  = Math.min(...times);
+
+    document.getElementById('ao5').textContent   = ao5   !== null ? fmt(ao5)   : '—';
+    document.getElementById('ao12').textContent  = ao12  !== null ? fmt(ao12)  : '—';
+    document.getElementById('ao100').textContent = ao100 !== null ? fmt(ao100) : '—';
+    document.getElementById('best').textContent  = fmt(best);
+
+    solves.forEach((solve, i) => {
+      const p2 = Number(solve.plus2) || 0;
+      const displayMs = solve.ms + p2 * 2000;
+      const timeLabel = p2 > 0 ? `${fmt(displayMs)}+` : fmt(displayMs);
+      const p2Label = p2 > 0 ? `+2 ×${p2}` : '+2';
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <span class="num">#${i+1}</span>
+        <span class="t">${timeLabel}</span>
+        <span class="scr" title="${solve.scramble}">${solve.scramble}</span>
+        <span class="actions">
+          <button class="p2 ${p2 > 0 ? 'active' : ''}" title="Click to add +2 (up to 8×), resets after 8">${p2Label}</button>
+          <button class="del" title="Delete">×</button>
+        </span>
+      `;
+      li.querySelector('.p2').addEventListener('click', () => incrementPlus2(solve.id));
+      li.querySelector('.del').addEventListener('click', () => deleteSolve(solve.id));
+      solveListEl.appendChild(li);
+    });
+  }
+
+  // --- Shared timer input logic ---
+  function onPressStart(e) {
+    if (state === 'running') {
+      stopTimer();
+      return;
+    }
+    if (state === 'idle') {
+      state = 'holding';
+      timeEl.textContent = '0.000';
+      timeEl.className = 'ready';
+      hintEl.textContent = 'Release to start';
+      holdTimer = setTimeout(() => {}, 300);
+    }
+  }
+
+  function onPressEnd() {
+    if (state === 'holding') {
+      clearTimeout(holdTimer);
+      startTimer();
+    }
+  }
+
+  // --- Keyboard ---
+  document.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space') return;
+    e.preventDefault();
+    if (e.repeat) return;
+    onPressStart();
+  });
+
+  document.addEventListener('keyup', (e) => {
+    if (e.code !== 'Space') return;
+    e.preventDefault();
+    onPressEnd();
+  });
+
+  // --- Touch ---
+  document.addEventListener('touchstart', (e) => {
+    if (e.target.closest('button, #type-selector')) return;
+    e.preventDefault();
+    onPressStart();
+  }, { passive: false });
+
+  document.addEventListener('touchend', (e) => {
+    if (e.target.closest('button, #type-selector')) return;
+    e.preventDefault();
+    onPressEnd();
+  }, { passive: false });
+
+  // --- Init ---
+  buildTypeSelector();
+  setScramble();
+  renderSolves();
+</script>
+</body>
+</html>

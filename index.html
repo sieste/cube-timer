@@ -459,14 +459,14 @@
   });
 
   // --- Touch ---
-  document.addEventListener('touchstart', (e) => {
-    if (e.target.closest('button, #type-selector')) return;
+  const timerArea = document.getElementById('timer-area');
+
+  timerArea.addEventListener('touchstart', (e) => {
     e.preventDefault();
     onPressStart();
   }, { passive: false });
 
-  document.addEventListener('touchend', (e) => {
-    if (e.target.closest('button, #type-selector')) return;
+  timerArea.addEventListener('touchend', (e) => {
     e.preventDefault();
     onPressEnd();
   }, { passive: false });
